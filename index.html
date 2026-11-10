@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GridBeam — simulateur de réseau d'antennes patch multi-faisceaux</title>
+  <meta name="description" content="Simulation interactive d'un réseau planaire d'antennes patch : formation de faisceaux multiples, diagramme 3D, espace u-v et champs E/H animés.">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <svg viewBox="0 0 32 32" width="28" height="28" aria-hidden="true">
+        <g fill="currentColor">
+          <rect x="3" y="3" width="6" height="6" rx="1.2"/><rect x="13" y="3" width="6" height="6" rx="1.2" opacity=".75"/><rect x="23" y="3" width="6" height="6" rx="1.2" opacity=".5"/>
+          <rect x="3" y="13" width="6" height="6" rx="1.2" opacity=".75"/><rect x="13" y="13" width="6" height="6" rx="1.2" opacity=".5"/><rect x="23" y="13" width="6" height="6" rx="1.2" opacity=".3"/>
+          <rect x="3" y="23" width="6" height="6" rx="1.2" opacity=".5"/><rect x="13" y="23" width="6" height="6" rx="1.2" opacity=".3"/><rect x="23" y="23" width="6" height="6" rx="1.2" opacity=".15"/>
+        </g>
+      </svg>
+      <div>
+        <h1>GridBeam</h1>
+        <p>Réseau d'antennes patch &amp; formation de faisceaux multiples</p>
+      </div>
+    </div>
+    <div class="top-actions">
+      <label class="preset">Scénario
+        <select id="preset">
+          <option value="mono">Faisceau unique 8×8</option>
+          <option value="dual">Double faisceau</option>
+          <option value="quad">Quatre faisceaux 12×12</option>
+          <option value="lowsll">Lobes secondaires bas (Chebyshev)</option>
+          <option value="grating">Lobes de réseau (pas = 1 λ)</option>
+          <option value="linear">Réseau linéaire 16×1</option>
+        </select>
+      </label>
+      <button id="btn-guide" class="btn">Guide</button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside class="side">
+      <details open>
+        <summary>Réseau</summary>
+        <div class="sec" id="ctl-array"></div>
+        <div class="sec">
+          <label class="row">Pondération d'amplitude
+            <select data-key="taper">
+              <option value="uniform">Uniforme</option>
+              <option value="cosine">Cosinus</option>
+              <option value="hamming">Hamming</option>
+              <option value="chebyshev">Dolph-Chebyshev</option>
+            </select>
+          </label>
+          <div id="ctl-sll"></div>
+          <label class="row">Déphaseurs
+            <select data-key="bits" data-num>
+              <option value="0">Phase continue</option>
+              <option value="2">2 bits (90°)</option>
+              <option value="3">3 bits (45°)</option>
+              <option value="4">4 bits (22,5°)</option>
+              <option value="5">5 bits</option>
+              <option value="6">6 bits</option>
+            </select>
+          </label>
+          <label class="row">Élément rayonnant
+            <select data-key="elem">
+              <option value="patch">Patch rectangulaire</option>
+              <option value="iso">Source isotrope (référence)</option>
+            </select>
+          </label>
+        </div>
+      </details>
+
+      <details open>
+        <summary>Faisceaux <span class="hint">cliquez dans la carte u-v pour pointer</span></summary>
+        <div class="sec">
+          <div id="beams"></div>
+          <button id="add-beam" class="btn wide">+ Ajouter un faisceau</button>
+        </div>
+      </details>
+
+      <details open>
+        <summary>Antenne patch</summary>
+        <div class="sec" id="ctl-patch"></div>
+        <div class="sec">
+          <label class="check"><input type="checkbox" id="auto" checked> Dimensionner le patch automatiquement à la fréquence</label>
+          <div id="ctl-size"></div>
+          <div id="ctl-feed"></div>
+          <button id="match" class="btn wide">Adapter l'alimentation à Z₀</button>
+          <div class="plot-s11"><canvas id="cv-s11"></canvas></div>
+          <p class="note">|S₁₁| autour de la fréquence de travail (trait vertical). Sous −10 dB, plus de 90 % de la puissance est acceptée.</p>
+        </div>
+      </details>
+
+      <details open>
+        <summary>Affichage &amp; puissance</summary>
+        <div class="sec" id="ctl-display"></div>
+      </details>
+    </aside>
+
+    <main>
+      <section class="metrics" id="metrics"></section>
+      <div class="warns" id="warns"></div>
+
+      <div class="grid">
+        <section class="panel p-3d">
+          <header><h2>Diagramme de rayonnement 3D</h2><span class="hint">glisser pour tourner</span></header>
+          <div class="cv"><canvas id="cv-3d"></canvas></div>
+        </section>
+
+        <section class="panel p-uv">
+          <header><h2>Espace u-v</h2><span class="hint">cliquer / glisser = pointer le faisceau actif</span></header>
+          <div class="cv"><canvas id="cv-uv"></canvas></div>
+        </section>
+
+        <section class="panel p-arr">
+          <header><h2>Excitation du réseau</h2><span class="hint">teinte = phase · opacité = amplitude</span></header>
+          <div class="cv"><canvas id="cv-arr"></canvas></div>
+        </section>
+
+        <section class="panel p-near">
+          <header>
+            <h2>Champ rayonné — coupe verticale</h2>
+            <div class="tools">
+              <div class="seg" id="nf-mode">
+                <button data-v="E" class="on" title="Champ électrique instantané">E(t)</button>
+                <button data-v="H" title="Champ magnétique instantané">H(t)</button>
+                <button data-v="dB" title="Amplitude en dB">|E| dB</button>
+              </div>
+              <select data-key="nfPlane" title="Plan de coupe">
+                <option value="beam">Plan du faisceau actif</option>
+                <option value="xz">Plan xz (plan E)</option>
+                <option value="yz">Plan yz (plan H)</option>
+              </select>
+              <label class="mini" title="Demi-largeur de la fenêtre">± <input type="range" data-key="nfSpan" data-num min="4" max="25" step="1"><output id="nf-span-out"></output></label>
+              <button id="play" class="btn icon" title="Lecture / pause">❚❚</button>
+            </div>
+          </header>
+          <div class="cv"><canvas id="cv-near"></canvas></div>
+        </section>
+
+        <section class="panel p-cut">
+          <header><h2 id="cut-title">Coupe du diagramme</h2><span class="hint">normalisé au maximum</span></header>
+          <div class="cv"><canvas id="cv-cut"></canvas></div>
+        </section>
+      </div>
+
+      <footer class="foot">
+        Modèle analytique (ligne de transmission + facteur de réseau) — sans couplage mutuel. Voir le <a href="#" id="foot-guide">guide</a> pour les hypothèses.
+      </footer>
+    </main>
+  </div>
+
+  <dialog id="guide">
+    <article>
+      <header><h2>Guide</h2><button class="btn icon" id="guide-close" aria-label="Fermer">✕</button></header>
+
+      <h3>Prise en main en 30 secondes</h3>
+      <ol>
+        <li>Choisissez un <b>scénario</b> en haut à droite, ou réglez le <b>nombre d'éléments</b> et le <b>pas</b> du réseau.</li>
+        <li><b>Cliquez dans la carte u-v</b> pour pointer le faisceau actif. Ajoutez d'autres faisceaux avec « + Ajouter un faisceau » : ils sont émis simultanément.</li>
+        <li>Réglez le <b>patch</b> (fréquence, substrat, dimensions, alimentation) et observez l'impédance, le S₁₁ et le gain.</li>
+        <li>Regardez l'onde se propager dans la <b>coupe verticale</b> ; survolez-la pour sonder E, H et la densité de puissance.</li>
+      </ol>
+
+      <h3>Lire les vues</h3>
+      <dl>
+        <dt>Diagramme 3D</dt><dd>Le rayon et la couleur donnent le niveau en dB dans chaque direction du demi-espace au-dessus du réseau.</dd>
+        <dt>Espace u-v</dt><dd>Vue « du dessus » du diagramme : u = sinθ·cosφ, v = sinθ·sinφ. Le centre est la normale au réseau (θ = 0), le bord est l'horizon (θ = 90°).</dd>
+        <dt>Excitation</dt><dd>Chaque patch dessiné à l'échelle. La teinte code la phase d'alimentation, l'opacité l'amplitude.</dd>
+        <dt>Coupe verticale</dt><dd>Somme cohérente des ondes émises par chaque élément. E(t) et H(t) sont animés ; en zone lointaine H = E / 377 Ω et lui est perpendiculaire.</dd>
+        <dt>Coupe du diagramme</dt><dd>Niveau en fonction de θ dans le plan vertical contenant le faisceau actif.</dd>
+      </dl>
+
+      <h3>Modèle physique</h3>
+      <dl>
+        <dt>Patch</dt><dd>Largeur W = c / (2f) · √(2 / (εr + 1)), permittivité effective ε<sub>eff</sub>, allongement de bord ΔL (Hammerstad), longueur L = c / (2f·√ε<sub>eff</sub>) − 2ΔL.</dd>
+        <dt>Impédance</dt><dd>R<sub>bord</sub> = 1 / (2·(G₁ + G₁₂)), puis R<sub>in</sub> = R<sub>bord</sub>·cos²(π·y₀ / L) pour une alimentation encastrée à y₀. Autour de la résonance : résonateur RLC parallèle de facteur Q déduit de la bande passante.</dd>
+        <dt>Élément</dt><dd>|E|² ∝ sinc²(k·W·v / 2) · cos²(k·L<sub>eff</sub>·u / 2) · (1 − v²).</dd>
+        <dt>Réseau</dt><dd>w<sub>mn</sub> = a<sub>m</sub>·a<sub>n</sub> · Σ<sub>b</sub> A<sub>b</sub>·exp(−j·k·(x<sub>m</sub>·u<sub>b</sub> + y<sub>n</sub>·v<sub>b</sub>)) : chaque faisceau apporte son gradient de phase, et les jeux de poids s'additionnent.</dd>
+        <dt>Directivité</dt><dd>D = 4π·P<sub>max</sub> / ∬ P·sinθ dθ dφ, intégrée numériquement. Gain réalisé = D · (1 − |S₁₁|²).</dd>
+      </dl>
+
+      <h3>Limites à garder en tête</h3>
+      <ul>
+        <li>Pas de couplage mutuel entre patchs, pas d'ondes de surface, plan de masse infini.</li>
+        <li>Pertes diélectriques et conductrices ignorées : le « gain réalisé » ne tient compte que de la désadaptation.</li>
+        <li>Les valeurs E / H / S de la sonde sont étalonnées sur le champ lointain ; très près du réseau elles sont indicatives.</li>
+      </ul>
+    </article>
+  </dialog>
+
+  <script src="js/physics.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
