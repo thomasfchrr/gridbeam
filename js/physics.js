@@ -1,26 +1,26 @@
 /*
- * physics.js — moteur électromagnétique du simulateur.
+ * physics.js — electromagnetic engine of the simulator.
  *
- * Tout est analytique (pas de solveur full-wave) :
- *   1. Patch rectangulaire : modèle ligne de transmission / cavité (Balanis, ch. 14)
- *   2. Réseau planaire     : facteur de réseau avec pondérations complexes
- *   3. Multi-faisceaux     : superposition des jeux de poids de chaque faisceau
- *   4. Champ proche        : somme cohérente des ondes sphériques de chaque élément
+ * Everything is analytical (no full-wave solver):
+ *   1. Rectangular patch: transmission-line / cavity model (Balanis, ch. 14)
+ *   2. Planar array      : array factor with complex weights
+ *   3. Multi-beam        : superposition of each beam's weight set
+ *   4. Near field        : coherent sum of each element's spherical wave
  *
- * Conventions : réseau dans le plan z = 0, rayonnement vers z > 0.
- *   u = sinθ·cosφ, v = sinθ·sinφ. La longueur L du patch est selon x (plan E = xz).
- *   Les positions du réseau sont exprimées en longueurs d'onde λ0.
+ * Conventions: array in the z = 0 plane, radiating towards z > 0.
+ *   u = sinθ·cosφ, v = sinθ·sinφ. The patch length L lies along x (E-plane = xz).
+ *   Array positions are expressed in wavelengths λ0.
  */
 (function (root) {
   'use strict';
 
-  const C0 = 299792458;        // vitesse de la lumière (m/s)
-  const ETA0 = 376.730313668;  // impédance du vide (Ω)
+  const C0 = 299792458;        // speed of light (m/s)
+  const ETA0 = 376.730313668;  // free-space impedance (Ω)
   const TWO_PI = 2 * Math.PI;
 
   const sinc = (x) => (Math.abs(x) < 1e-8 ? 1 : Math.sin(x) / x);
 
-  /** Fonction de Bessel J0 par intégration (convergence spectrale, intégrande périodique). */
+  /** Bessel function J0 by integration (spectral convergence, periodic integrand). */
   function besselJ0(x) {
     const n = 48;
     let s = 0;
@@ -29,20 +29,20 @@
   }
 
   /* ------------------------------------------------------------------ */
-  /* 1. Patch rectangulaire                                              */
+  /* 1. Rectangular patch                                                */
   /* ------------------------------------------------------------------ */
 
-  /** Permittivité effective d'une ligne microruban de largeur W sur substrat (er, h). */
+  /** Effective permittivity of a microstrip line of width W on a substrate (er, h). */
   function epsEff(er, h, W) {
     return (er + 1) / 2 + (er - 1) / 2 / Math.sqrt(1 + (12 * h) / W);
   }
 
-  /** Allongement dû aux champs de bord (Hammerstad). */
+  /** Length extension due to fringing fields (Hammerstad). */
   function deltaL(eeff, h, W) {
     return (0.412 * h * ((eeff + 0.3) * (W / h + 0.264))) / ((eeff - 0.258) * (W / h + 0.8));
   }
 
-  /** Dimensions (m) d'un patch résonant à f (Hz) sur un substrat (er, h en m). */
+  /** Dimensions (m) of a patch resonant at f (Hz) on a substrate (er, h in m). */
   function designPatch(f, er, h) {
     const W = (C0 / (2 * f)) * Math.sqrt(2 / (er + 1));
     const ee = epsEff(er, h, W);
@@ -50,7 +50,7 @@
     return { W, L: Math.max(L, W * 0.05) };
   }
 
-  /** Conductance propre G1 et mutuelle G12 des deux fentes rayonnantes. */
+  /** Self conductance G1 and mutual conductance G12 of the two radiating slots. */
   function slotConductances(k0, W, L) {
     const n = 200;
     const X = (k0 * W) / 2;
@@ -68,8 +68,8 @@
   }
 
   /**
-   * Analyse complète d'un patch.
-   * @param p {f, er, h, W, L (SI), inset (fraction de L, 0..0.5), z0 (Ω)}
+   * Full analysis of a patch.
+   * @param p {f, er, h, W, L (SI), inset (fraction of L, 0..0.5), z0 (Ω)}
    */
   function analyzePatch(p) {
     const { f, er, h, W, L, inset, z0 } = p;
@@ -77,12 +77,12 @@
     const ee = epsEff(er, h, W);
     const dL = deltaL(ee, h, W);
     const Leff = L + 2 * dL;
-    const fr = C0 / (2 * Leff * Math.sqrt(ee));           // fréquence de résonance (TM010)
+    const fr = C0 / (2 * Leff * Math.sqrt(ee));           // resonant frequency (TM010)
     const { G1, G12 } = slotConductances(TWO_PI * fr / C0, W, L);
-    const Redge = 1 / (2 * (G1 + G12));                   // résistance au bord rayonnant
+    const Redge = 1 / (2 * (G1 + G12));                   // resistance at the radiating edge
     const cosI = Math.cos(Math.PI * inset);
-    const Rin = Math.max(Redge * cosI * cosI, 0.01);      // alimentation encastrée à y0 = inset·L
-    // Bande passante fractionnaire (ROS < 2) et facteur de qualité associé
+    const Rin = Math.max(Redge * cosI * cosI, 0.01);      // inset feed at y0 = inset·L
+    // Fractional bandwidth (VSWR < 2) and the matching quality factor
     const BW = Math.max(3.77 * ((er - 1) / (er * er)) * (W / L) * (h / lam0), 0.002);
     const Q = 1 / (BW * Math.SQRT2);
     const out = { W, L, lam0, eeff: ee, dL, Leff, fr, G1, G12, Redge, Rin, BW, Q, z0, inset };
@@ -92,13 +92,13 @@
     out.gamma = g.mag;
     out.s11dB = 20 * Math.log10(Math.max(g.mag, 1e-6));
     out.vswr = g.mag >= 0.9999 ? Infinity : (1 + g.mag) / (1 - g.mag);
-    out.mismatch = 1 - g.mag * g.mag;                     // rendement d'adaptation
-    // Encastrement idéal pour Rin = Z0
+    out.mismatch = 1 - g.mag * g.mag;                     // mismatch efficiency
+    // Ideal inset for Rin = Z0
     out.insetMatch = Redge > z0 ? Math.acos(Math.sqrt(z0 / Redge)) / Math.PI : 0;
     return out;
   }
 
-  /** Impédance d'entrée (circuit RLC parallèle autour de la résonance). */
+  /** Input impedance (parallel RLC circuit around resonance). */
   function zinAt(patch, f) {
     const x = patch.Q * (f / patch.fr - patch.fr / f);
     const d = 1 + x * x;
@@ -113,7 +113,7 @@
   }
 
   /**
-   * Diagramme d'amplitude d'un patch (2 fentes, plan de masse infini).
+   * Amplitude pattern of a patch (2 slots, infinite ground plane).
    * |E|² = sinc²(kW·v/2) · cos²(kLeff·u/2) · (1 − v²)
    */
   function patchElement(Wlam, LeffLam) {
@@ -123,7 +123,7 @@
   const isotropicElement = () => 1;
 
   /* ------------------------------------------------------------------ */
-  /* 2. Pondérations                                                     */
+  /* 2. Weights                                                          */
   /* ------------------------------------------------------------------ */
 
   function chebT(m, x) {
@@ -132,7 +132,7 @@
     return x < 0 && m % 2 ? -c : c;
   }
 
-  /** Loi d'amplitude 1D (normalisée, max = 1). sll : niveau de lobes visé en dB (Chebyshev). */
+  /** 1D amplitude taper (normalised, max = 1). sll: target sidelobe level in dB (Chebyshev). */
   function taper(type, N, sll) {
     const w = new Float64Array(N).fill(1);
     if (N < 2 || type === 'uniform') return w;
@@ -156,7 +156,7 @@
   }
 
   /**
-   * Poids complexes du réseau pour un ensemble de faisceaux.
+   * Complex array weights for a set of beams.
    *   w_mn = t_m·t_n · Σ_b A_b · exp(−j·2π·(x_m·u_b + y_n·v_b))
    * @param c {nx, ny, dx, dy (λ), beams:[{theta, phi (°), amp (dB)}], taper, sll, bits}
    */
@@ -180,7 +180,7 @@
         }
       }
     }
-    // Quantification de phase (déphaseurs numériques à `bits` bits) puis normalisation
+    // Phase quantisation (digital phase shifters with `bits` bits) then normalisation
     const step = c.bits > 0 ? TWO_PI / (1 << c.bits) : 0;
     const amp = new Float64Array(nx * ny), phase = new Float64Array(nx * ny);
     let mx = 1e-12;
@@ -199,12 +199,12 @@
   }
 
   /* ------------------------------------------------------------------ */
-  /* 3. Champ lointain                                                   */
+  /* 3. Far field                                                        */
   /* ------------------------------------------------------------------ */
 
   /**
-   * Retourne f(u, v) → densité de puissance rayonnée |AF·g|² (non normalisée).
-   * La somme double est factorisée : Σ_m e^{jk·x_m·u} · (Σ_n w_mn · e^{jk·y_n·v}).
+   * Returns f(u, v) → radiated power density |AF·g|² (not normalised).
+   * The double sum is factorised: Σ_m e^{jk·x_m·u} · (Σ_n w_mn · e^{jk·y_n·v}).
    */
   function makeEvaluator(w, elem) {
     const { nx, ny, xs, ys, wr, wi } = w;
@@ -232,7 +232,7 @@
   }
 
   /**
-   * Échantillonne le demi-espace z > 0 sur une grille (θ, φ) et intègre la directivité.
+   * Samples the half-space z > 0 on a (θ, φ) grid and integrates the directivity.
    * @returns {nt, np, P (Float32Array nt×np), pmax, integral}
    */
   function sampleHemisphere(evalP, nt, np) {
@@ -254,7 +254,7 @@
     return { nt, np, P, pmax, integral };
   }
 
-  /** Vrai si un lobe de réseau entre dans l'espace visible pour le faisceau (ub, vb). */
+  /** True if a grating lobe enters visible space for the beam (ub, vb). */
   function hasGratingLobe(ub, vb, dx, dy, nx, ny) {
     for (let p = -3; p <= 3; p++) {
       for (let q = -3; q <= 3; q++) {
@@ -268,12 +268,12 @@
   }
 
   /* ------------------------------------------------------------------ */
-  /* 4. Champ proche (coupe verticale)                                   */
+  /* 4. Near field (vertical cut)                                        */
   /* ------------------------------------------------------------------ */
 
   /**
-   * Phaseur du champ dans le plan vertical d'azimut phi0, somme des ondes sphériques :
-   *   F(P) = Σ w_mn · g(direction) · exp(−j·2π·r) / r     (r en λ)
+   * Field phasor in the vertical plane at azimuth phi0, sum of spherical waves:
+   *   F(P) = Σ w_mn · g(direction) · exp(−j·2π·r) / r     (r in λ)
    * @param o {phi0 (rad), half (λ), zmax (λ), cols, rows}
    */
   function computeNearField(w, elem, o) {

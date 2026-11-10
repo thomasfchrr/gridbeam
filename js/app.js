@@ -1,6 +1,6 @@
 /*
- * app.js — état, interface et rendus du simulateur.
- * Dépend de window.Physics (js/physics.js). Aucune bibliothèque externe.
+ * app.js — state, UI and rendering for the simulator.
+ * Depends on window.Physics (js/physics.js). No external libraries.
  */
 (function () {
   'use strict';
@@ -11,7 +11,7 @@
   const MAX_BEAMS = BEAM_COLORS.length;
 
   /* ------------------------------------------------------------------ */
-  /* État                                                                */
+  /* State                                                               */
   /* ------------------------------------------------------------------ */
   const S = {
     nx: 8, ny: 8, dx: 0.5, dy: 0.5, taper: 'uniform', sll: 30, bits: 0, elem: 'patch',
@@ -20,8 +20,8 @@
     dyn: 40, pinDbm: 30,
     nfMode: 'E', nfPlane: 'beam', nfSpan: 12, play: true,
   };
-  const R = {};                       // résultats du dernier calcul
-  const view = { az: -0.7, el: 0.48 }; // caméra 3D
+  const R = {};                       // results of the last computation
+  const view = { az: -0.7, el: 0.48 }; // 3D camera
   let wavePhase = 0, probe = null;
   let needAll = true, needNear = false, nearDirty = true;
 
@@ -35,7 +35,7 @@
   };
 
   /* ------------------------------------------------------------------ */
-  /* Palettes                                                            */
+  /* Colormaps                                                            */
   /* ------------------------------------------------------------------ */
   function makeLut(stops) {
     const lut = new Uint8Array(256 * 3);
@@ -51,7 +51,7 @@
   const lutCss = (lut, i) => `rgb(${lut[i * 3]},${lut[i * 3 + 1]},${lut[i * 3 + 2]})`;
 
   /* ------------------------------------------------------------------ */
-  /* Construction des contrôles                                          */
+  /* Building the controls                                               */
   /* ------------------------------------------------------------------ */
   const ctl = {};
   function addSlider(host, o) {
@@ -69,24 +69,24 @@
   }
 
   function buildControls() {
-    addSlider('#ctl-array', { key: 'nx', label: 'Éléments selon x', min: 1, max: 16, step: 1, tip: 'Nombre de patchs le long de x' });
-    addSlider('#ctl-array', { key: 'ny', label: 'Éléments selon y', min: 1, max: 16, step: 1, tip: 'Nombre de patchs le long de y' });
+    addSlider('#ctl-array', { key: 'nx', label: 'Elements along x', min: 1, max: 16, step: 1, tip: 'Number of patches along x' });
+    addSlider('#ctl-array', { key: 'ny', label: 'Elements along y', min: 1, max: 16, step: 1, tip: 'Number of patches along y' });
     const mm = (v) => `${v.toFixed(2)} λ · ${(v * (R.lam || 0) * 1e3).toFixed(2)} mm`;
-    addSlider('#ctl-array', { key: 'dx', label: 'Pas selon x', min: 0.25, max: 1.5, step: 0.01, fmt: mm, tip: 'Distance centre à centre. Au-delà de ~0,5 λ des lobes de réseau peuvent apparaître.' });
-    addSlider('#ctl-array', { key: 'dy', label: 'Pas selon y', min: 0.25, max: 1.5, step: 0.01, fmt: mm });
-    addSlider('#ctl-sll', { key: 'sll', label: 'Lobes secondaires visés', min: 15, max: 60, step: 1, fmt: (v) => `−${v} dB` });
+    addSlider('#ctl-array', { key: 'dx', label: 'Spacing along x', min: 0.25, max: 1.5, step: 0.01, fmt: mm, tip: 'Centre-to-centre distance. Beyond ~0.5 λ grating lobes may appear.' });
+    addSlider('#ctl-array', { key: 'dy', label: 'Spacing along y', min: 0.25, max: 1.5, step: 0.01, fmt: mm });
+    addSlider('#ctl-sll', { key: 'sll', label: 'Target sidelobe level', min: 15, max: 60, step: 1, fmt: (v) => `−${v} dB` });
 
-    addSlider('#ctl-patch', { key: 'f', label: 'Fréquence', min: 1, max: 60, step: 0.1, dec: 1, unit: 'GHz' });
-    addSlider('#ctl-patch', { key: 'er', label: 'Permittivité du substrat εr', min: 1.5, max: 12, step: 0.05, dec: 2, tip: 'FR-4 ≈ 4,4 · Rogers RT5880 = 2,2 · alumine ≈ 9,8' });
-    addSlider('#ctl-patch', { key: 'h', label: 'Épaisseur du substrat h', min: 0.1, max: 3.2, step: 0.001, dec: 3, unit: 'mm' });
-    addSlider('#ctl-size', { key: 'W', label: 'Largeur W (selon y)', min: 0.5, max: 50, step: 0.001, dec: 3, unit: 'mm', tip: 'Fixe surtout la résistance de rayonnement et la bande passante' });
-    addSlider('#ctl-size', { key: 'L', label: 'Longueur L (selon x)', min: 0.5, max: 50, step: 0.001, dec: 3, unit: 'mm', tip: 'Fixe la fréquence de résonance (≈ λg / 2)' });
-    addSlider('#ctl-feed', { key: 'inset', label: 'Encastrement de l\'alimentation y₀ / L', min: 0, max: 50, step: 0.5, dec: 1, unit: '%', tip: '0 % = bord rayonnant (impédance maximale), 50 % = centre (impédance nulle)' });
-    addSlider('#ctl-feed', { key: 'z0', label: 'Impédance de ligne Z₀', min: 25, max: 200, step: 1, unit: 'Ω' });
+    addSlider('#ctl-patch', { key: 'f', label: 'Frequency', min: 1, max: 60, step: 0.1, dec: 1, unit: 'GHz' });
+    addSlider('#ctl-patch', { key: 'er', label: 'Substrate permittivity εr', min: 1.5, max: 12, step: 0.05, dec: 2, tip: 'FR-4 ≈ 4.4 · Rogers RT5880 = 2.2 · alumina ≈ 9.8' });
+    addSlider('#ctl-patch', { key: 'h', label: 'Substrate thickness h', min: 0.1, max: 3.2, step: 0.001, dec: 3, unit: 'mm' });
+    addSlider('#ctl-size', { key: 'W', label: 'Width W (along y)', min: 0.5, max: 50, step: 0.001, dec: 3, unit: 'mm', tip: 'Mainly sets the radiation resistance and the bandwidth' });
+    addSlider('#ctl-size', { key: 'L', label: 'Length L (along x)', min: 0.5, max: 50, step: 0.001, dec: 3, unit: 'mm', tip: 'Sets the resonant frequency (≈ λg / 2)' });
+    addSlider('#ctl-feed', { key: 'inset', label: 'Feed inset y₀ / L', min: 0, max: 50, step: 0.5, dec: 1, unit: '%', tip: '0 % = radiating edge (highest impedance), 50 % = centre (zero impedance)' });
+    addSlider('#ctl-feed', { key: 'z0', label: 'Line impedance Z₀', min: 25, max: 200, step: 1, unit: 'Ω' });
 
-    addSlider('#ctl-display', { key: 'dyn', label: 'Dynamique d\'affichage', min: 20, max: 60, step: 1, unit: 'dB' });
+    addSlider('#ctl-display', { key: 'dyn', label: 'Display dynamic range', min: 20, max: 60, step: 1, unit: 'dB' });
     addSlider('#ctl-display', {
-      key: 'pinDbm', label: 'Puissance injectée', min: 0, max: 50, step: 1,
+      key: 'pinDbm', label: 'Input power', min: 0, max: 50, step: 1,
       fmt: (v) => { const w = Math.pow(10, v / 10) / 1000; return `${v} dBm · ${w >= 1 ? w.toFixed(w < 10 ? 1 : 0) + ' W' : (w * 1000).toFixed(0) + ' mW'}`; },
     });
 
@@ -124,7 +124,7 @@
     guide.addEventListener('click', (e) => { if (e.target === guide) guide.close(); });
   }
 
-  /** Met à jour les éléments d'interface qui dépendent de l'état (hors sliders). */
+  /** Refreshes the UI elements that depend on state (other than sliders). */
   function syncMisc() {
     ctl.sll.el.style.display = S.taper === 'chebyshev' ? '' : 'none';
     ctl.W.input.disabled = ctl.L.input.disabled = S.auto;
@@ -143,11 +143,11 @@
     renderBeams(); syncMisc(); needAll = true;
   }
 
-  /* ---------- Liste des faisceaux ---------- */
+  /* ---------- Beam list ---------- */
   const BEAM_FIELDS = [
-    { k: 'theta', label: 'Dépointage θ', min: 0, max: 80, step: 0.5, fmt: (v) => v.toFixed(1) + '°' },
-    { k: 'phi', label: 'Azimut φ', min: 0, max: 360, step: 1, fmt: (v) => v.toFixed(0) + '°' },
-    { k: 'amp', label: 'Niveau relatif', min: -20, max: 0, step: 0.5, fmt: (v) => v.toFixed(1) + ' dB' },
+    { k: 'theta', label: 'Steering θ', min: 0, max: 80, step: 0.5, fmt: (v) => v.toFixed(1) + '°' },
+    { k: 'phi', label: 'Azimuth φ', min: 0, max: 360, step: 1, fmt: (v) => v.toFixed(0) + '°' },
+    { k: 'amp', label: 'Relative level', min: -20, max: 0, step: 0.5, fmt: (v) => v.toFixed(1) + ' dB' },
   ];
   function renderBeams() {
     const host = $('#beams');
@@ -156,7 +156,7 @@
       const card = document.createElement('div');
       card.className = 'beam';
       card.style.setProperty('--c', BEAM_COLORS[i]);
-      card.innerHTML = `<div class="beam-h"><span><i></i>Faisceau ${i + 1}</span>${S.beams.length > 1 ? '<button title="Supprimer" aria-label="Supprimer">✕</button>' : ''}</div>` +
+      card.innerHTML = `<div class="beam-h"><span><i></i>Beam ${i + 1}</span>${S.beams.length > 1 ? '<button title="Remove" aria-label="Remove">✕</button>' : ''}</div>` +
         BEAM_FIELDS.map((f) => `<label class="ctl"><span>${f.label}</span><output data-o="${f.k}"></output><input type="range" data-f="${f.k}" min="${f.min}" max="${f.max}" step="${f.step}"></label>`).join('');
       card.addEventListener('pointerdown', () => { if (S.sel !== i) { S.sel = i; syncBeams(); needAll = true; } });
       card.querySelectorAll('input').forEach((inp) => inp.addEventListener('input', () => { b[inp.dataset.f] = +inp.value; syncBeams(); needAll = true; }));
@@ -183,7 +183,7 @@
   }
 
   /* ------------------------------------------------------------------ */
-  /* Calcul                                                              */
+  /* Compute                                                             */
   /* ------------------------------------------------------------------ */
   const beamUV = (b) => {
     const st = Math.sin(b.theta * DEG);
@@ -208,7 +208,7 @@
     R.hemi = P.sampleHemisphere(R.evalP, 61, 120);
     R.pmax = R.hemi.pmax;
     for (const b of S.beams) { const [u, v] = beamUV(b); R.pmax = Math.max(R.pmax, R.evalP(u, v)); }
-    // Une source isotrope rayonne aussi vers z < 0 : la puissance totale double.
+    // An isotropic source also radiates towards z < 0: total power doubles.
     R.D = (4 * Math.PI * R.pmax) / (R.hemi.integral * (S.elem === 'patch' ? 1 : 2));
     R.G = R.D * R.patch.mismatch;
     R.pin = Math.pow(10, S.pinDbm / 10) / 1000;
@@ -220,7 +220,7 @@
     drawStatic();
   }
 
-  /* ---------- Carte u-v ---------- */
+  /* ---------- u-v map ---------- */
   const UVN = 141;
   const uvCanvas = document.createElement('canvas');
   uvCanvas.width = uvCanvas.height = UVN;
@@ -231,7 +231,7 @@
       for (let i = 0; i < UVN; i++) {
         const u = (2 * i) / (UVN - 1) - 1, k = (j * UVN + i) * 4;
         if (u * u + v * v > 1.03) continue;
-        const s = Math.min(1, 1 / Math.hypot(u, v)); // le liseré hors disque reprend la valeur du bord
+        const s = Math.min(1, 1 / Math.hypot(u, v)); // the rim just outside the disc reuses the edge value
         const t = Math.max(0, 1 + toDb(R.evalP(u * s, v * s)) / S.dyn);
         const c = Math.round(t * 255) * 3;
         d[k] = LUT_DB[c]; d[k + 1] = LUT_DB[c + 1]; d[k + 2] = LUT_DB[c + 2]; d[k + 3] = 255;
@@ -240,13 +240,13 @@
     ctx.putImageData(img, 0, 0);
   }
 
-  /* ---------- Coupe dans le plan du faisceau actif ---------- */
+  /* ---------- Cut in the active beam's plane ---------- */
   const CUT_N = 361;
   function computeCut() {
     const b = S.beams[S.sel], cp = Math.cos(b.phi * DEG), sp = Math.sin(b.phi * DEG);
     const db = new Float32Array(CUT_N);
     for (let i = 0; i < CUT_N; i++) { const st = Math.sin((i * 0.5 - 90) * DEG); db[i] = toDb(R.evalP(st * cp, st * sp)); }
-    // Lobe principal : sommet local le plus proche de la direction visée
+    // Main lobe: local peak closest to the steered direction
     let i = Math.round((b.theta + 90) / 0.5);
     while (i > 0 && db[i - 1] > db[i]) i--;
     while (i < CUT_N - 1 && db[i + 1] > db[i]) i++;
@@ -263,30 +263,30 @@
     R.cut = { db, phi: b.phi, hpbw: (right - left) * 0.5, sll: sll - pk, peakDeg: i * 0.5 - 90 };
   }
 
-  /* ---------- Champ proche ---------- */
+  /* ---------- Near field ---------- */
   const nearCanvas = document.createElement('canvas');
   const NEAR_PAD = { l: 36, r: 10, t: 8, b: 24 };
   let refineTimer = 0;
-  /** hi = false : calcul rapide pendant les réglages ; un passage fin suit après 250 ms de calme. */
+  /** hi = false: fast pass while adjusting; a fine pass follows after 250 ms of quiet. */
   function computeNear(hi) {
     clearTimeout(refineTimer);
     if (!hi) refineTimer = setTimeout(() => computeNear(true), 250);
     const box = $('#cv-near').getBoundingClientRect();
     const aw = Math.max(50, box.width - NEAR_PAD.l - NEAR_PAD.r), ah = Math.max(50, box.height - NEAR_PAD.t - NEAR_PAD.b);
     const n = S.nx * S.ny;
-    // Budget de calcul : la résolution baisse quand le réseau grossit.
+    // Compute budget: resolution drops as the array grows.
     const px = hi ? Math.min(110000, Math.max(12000, 1.2e7 / n)) : Math.min(30000, Math.max(3500, 1.6e6 / n));
     const cols = Math.round(Math.sqrt((px * aw) / ah)), rows = Math.max(8, Math.round((cols * ah) / aw));
     const phi0 = S.nfPlane === 'xz' ? 0 : S.nfPlane === 'yz' ? Math.PI / 2 : S.beams[S.sel].phi * DEG;
     const nf = P.computeNearField(R.w, R.elem, { phi0, half: S.nfSpan, zmax: (2 * S.nfSpan * ah) / aw, cols, rows });
-    // Référence d'affichage : maximum hors de la zone réactive collée au réseau
+    // Display reference: maximum outside the reactive zone right above the array
     const N = cols * rows, mag = new Float32Array(N);
     let ref = 1e-12;
     for (let i = 0; i < N; i++) {
       mag[i] = Math.hypot(nf.re[i], nf.im[i]);
       if (i < N - Math.ceil(rows * 0.1) * cols && mag[i] > ref) ref = mag[i];
     }
-    // Compression (loi de puissance) pour garder l'onde lisible loin du réseau
+    // Compression (power law) to keep the wave readable far from the array
     nf.scale = new Float32Array(N); nf.dbIdx = new Uint8Array(N);
     for (let i = 0; i < N; i++) {
       const a = Math.min(1, mag[i] / ref);
@@ -300,7 +300,7 @@
   }
 
   /* ------------------------------------------------------------------ */
-  /* Indicateurs                                                         */
+  /* Metrics                                                             */
   /* ------------------------------------------------------------------ */
   const fmtLen = (m) => (m >= 1 ? m.toFixed(2) + ' m' : m >= 0.01 ? (m * 100).toFixed(1) + ' cm' : (m * 1000).toFixed(2) + ' mm');
   function updateMetrics() {
@@ -310,29 +310,29 @@
     const ap = Math.hypot((S.nx - 1) * S.dx + (S.L * 1e-3) / R.lam, (S.ny - 1) * S.dy + (S.W * 1e-3) / R.lam) * R.lam;
     R.farField = (2 * ap * ap) / R.lam;
     const items = [
-      ['Directivité', dB(R.D).toFixed(1), 'dBi', `${S.nx * S.ny} éléments`],
-      ['Gain réalisé', dB(R.G).toFixed(1), 'dBi', `adaptation ${dB(p.mismatch).toFixed(2)} dB`],
-      ['PIRE', eirp.toFixed(1), 'dBm', `${(Math.pow(10, eirp / 10) / 1000).toPrecision(3)} W`],
-      ['Ouverture −3 dB', R.cut.hpbw.toFixed(1), '°', `plan φ = ${R.cut.phi.toFixed(0)}°`],
-      ['Lobes secondaires', single && isFinite(R.cut.sll) ? R.cut.sll.toFixed(1) : '—', single ? 'dB' : '', single ? 'dans la coupe' : 'multi-faisceaux'],
-      ['Impédance Zin', `${z.re.toFixed(1)}${z.im < 0 ? '−' : '+'}j${Math.abs(z.im).toFixed(1)}`, 'Ω', `ROS ${p.vswr < 100 ? p.vswr.toFixed(2) : '>100'} · S₁₁ ${p.s11dB.toFixed(1)} dB`],
-      ['Résonance', (p.fr / 1e9).toFixed(2), 'GHz', `bande ≈ ${(p.BW * 100).toFixed(1)} % · R bord ${p.Redge.toFixed(0)} Ω`],
-      ['Zone lointaine', fmtLen(R.farField), '', `λ₀ = ${fmtLen(R.lam)}`],
+      ['Directivity', dB(R.D).toFixed(1), 'dBi', `${S.nx * S.ny} elements`],
+      ['Realized gain', dB(R.G).toFixed(1), 'dBi', `mismatch ${dB(p.mismatch).toFixed(2)} dB`],
+      ['EIRP', eirp.toFixed(1), 'dBm', `${(Math.pow(10, eirp / 10) / 1000).toPrecision(3)} W`],
+      ['−3 dB beamwidth', R.cut.hpbw.toFixed(1), '°', `plane φ = ${R.cut.phi.toFixed(0)}°`],
+      ['Sidelobe level', single && isFinite(R.cut.sll) ? R.cut.sll.toFixed(1) : '—', single ? 'dB' : '', single ? 'in the cut' : 'multi-beam'],
+      ['Impedance Zin', `${z.re.toFixed(1)}${z.im < 0 ? '−' : '+'}j${Math.abs(z.im).toFixed(1)}`, 'Ω', `VSWR ${p.vswr < 100 ? p.vswr.toFixed(2) : '>100'} · S₁₁ ${p.s11dB.toFixed(1)} dB`],
+      ['Resonance', (p.fr / 1e9).toFixed(2), 'GHz', `bandwidth ≈ ${(p.BW * 100).toFixed(1)} % · edge R ${p.Redge.toFixed(0)} Ω`],
+      ['Far-field distance', fmtLen(R.farField), '', `λ₀ = ${fmtLen(R.lam)}`],
     ];
     $('#metrics').innerHTML = items.map(([k, v, u, s]) => `<div class="metric"><div class="k">${k}</div><div class="v">${v}<small>${u}</small></div><div class="s">${s}</div></div>`).join('');
 
     const warns = [];
-    if (S.beams.some((b) => { const [u, v] = beamUV(b); return P.hasGratingLobe(u, v, S.dx, S.dy, S.nx, S.ny); })) warns.push('Lobes de réseau dans l\'espace visible — réduisez le pas ou le dépointage');
-    if (S.elem === 'patch' && ((S.L * 1e-3) / R.lam > S.dx && S.nx > 1 || (S.W * 1e-3) / R.lam > S.dy && S.ny > 1)) warns.push('Les patchs se chevauchent — augmentez le pas ou εr');
-    if (Math.abs(p.fr / (S.f * 1e9) - 1) > p.BW / 2) warns.push(`Patch hors résonance (${(p.fr / 1e9).toFixed(2)} GHz) — ajustez L`);
-    else if (p.s11dB > -10) warns.push('Désadaptation : S₁₁ > −10 dB — utilisez « Adapter l\'alimentation »');
-    if (S.h * 1e-3 > 0.1 * R.lam) warns.push('Substrat épais (h > 0,1 λ) — le modèle perd en précision');
+    if (S.beams.some((b) => { const [u, v] = beamUV(b); return P.hasGratingLobe(u, v, S.dx, S.dy, S.nx, S.ny); })) warns.push('Grating lobes in visible space — reduce the spacing or the steering angle');
+    if (S.elem === 'patch' && ((S.L * 1e-3) / R.lam > S.dx && S.nx > 1 || (S.W * 1e-3) / R.lam > S.dy && S.ny > 1)) warns.push('Patches overlap — increase the spacing or εr');
+    if (Math.abs(p.fr / (S.f * 1e9) - 1) > p.BW / 2) warns.push(`Patch off resonance (${(p.fr / 1e9).toFixed(2)} GHz) — adjust L`);
+    else if (p.s11dB > -10) warns.push('Mismatch: S₁₁ > −10 dB — use “Match feed to Z₀”');
+    if (S.h * 1e-3 > 0.1 * R.lam) warns.push('Thick substrate (h > 0.1 λ) — the model loses accuracy');
     $('#warns').innerHTML = warns.map((w) => `<span class="warn">⚠ ${w}</span>`).join('');
-    $('#cut-title').textContent = `Coupe du diagramme — plan φ = ${R.cut.phi.toFixed(0)}°`;
+    $('#cut-title').textContent = `Pattern cut — plane φ = ${R.cut.phi.toFixed(0)}°`;
   }
 
   /* ------------------------------------------------------------------ */
-  /* Rendus                                                              */
+  /* Render                                                              */
   /* ------------------------------------------------------------------ */
   function fit(canvas) {
     const r = canvas.getBoundingClientRect(), d = Math.min(window.devicePixelRatio || 1, 2);
@@ -360,11 +360,11 @@
     const { nt, np, P: pw } = R.hemi;
     const sc = Math.min(w * 0.44, h * 0.72), cx = w / 2, cy = h * 0.8;
     const ca = Math.cos(view.az), sa = Math.sin(view.az), ce = Math.cos(view.el), se = Math.sin(view.el);
-    // Projection orthographique : retourne [X écran, Y écran, proximité caméra]
+    // Orthographic projection: returns [screen X, screen Y, closeness to camera]
     const proj = (x, y, z) => { const xr = x * ca - y * sa, yr = x * sa + y * ca; return [cx + xr * sc, cy - (yr * se + z * ce) * sc, -yr * ce + z * se]; };
     const line = (a, b) => { ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke(); };
 
-    // Sol : cercles de niveau et axes
+    // Ground: level circles and axes
     ctx.strokeStyle = C.grid; ctx.lineWidth = 1;
     for (const rr of [0.5, 1]) {
       ctx.beginPath();
@@ -375,7 +375,7 @@
     ctx.fillStyle = C.text; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     [['x', 1.12, 0, 0], ['y', 0, 1.12, 0], ['z', 0, 0, 1.1]].forEach(([n, x, y, z]) => { const p = proj(x, y, z); line(o, p); ctx.fillText(n, p[0] + (p[0] - o[0]) * 0.06, p[1] + (p[1] - o[1]) * 0.06); });
 
-    // Surface du diagramme : r = niveau en dB ramené sur [0, 1]
+    // Pattern surface: r = level in dB mapped to [0, 1]
     const V = new Float32Array(nt * np * 4);
     for (let i = 0; i < nt; i++) {
       const th = (i / (nt - 1)) * Math.PI / 2, st = Math.sin(th), ct = Math.cos(th);
@@ -394,14 +394,14 @@
     quads.sort((p, q) => p[0] - q[0]);
     ctx.lineWidth = 0.7; ctx.lineJoin = 'round';
     for (const q of quads) {
-      // Léger ombrage par la proximité pour donner du relief
+      // Colour follows the level
       const col = lutCss(LUT_DB, Math.round(255 * Math.min(1, q[5])));
       ctx.fillStyle = ctx.strokeStyle = col;
       ctx.beginPath(); ctx.moveTo(V[q[1]], V[q[1] + 1]);
       for (let k = 2; k <= 4; k++) ctx.lineTo(V[q[k]], V[q[k] + 1]);
       ctx.closePath(); ctx.fill(); ctx.stroke();
     }
-    // Directions visées
+    // Steered directions
     S.beams.forEach((b, i) => {
       const [u, v] = beamUV(b), wz = Math.cos(b.theta * DEG), p = proj(u * 1.12, v * 1.12, wz * 1.12);
       ctx.strokeStyle = ctx.fillStyle = BEAM_COLORS[i]; ctx.lineWidth = i === S.sel ? 2 : 1.2; ctx.setLineDash([4, 4]);
@@ -442,7 +442,7 @@
     colorbar(ctx, w - 16, cy - rad * 0.6, 8, rad * 1.2);
   }
 
-  /* ---------- Excitation du réseau ---------- */
+  /* ---------- Array excitation ---------- */
   function drawArray() {
     const { ctx, w, h } = fit($('#cv-arr'));
     const { nx, ny, dx, dy, amp, phase } = R.w;
@@ -460,7 +460,7 @@
       else ctx.arc(x, y, Math.max(2, Math.min(dx, dy) * sc * 0.22), 0, 7);
       ctx.fill(); ctx.stroke();
     }
-    // Légende de phase + repère
+    // Phase legend + axes
     const lw = Math.min(w - 60, 180), lx = cx - lw / 2, ly = h - 24;
     for (let i = 0; i < lw; i++) { ctx.fillStyle = `hsl(${(i / lw) * 360},85%,60%)`; ctx.fillRect(lx + i, ly, 1.5, 6); }
     ctx.fillStyle = C.text; ctx.textBaseline = 'top'; ctx.textAlign = 'left'; ctx.fillText('0°', lx, ly + 9);
@@ -471,7 +471,7 @@
     ctx.fillText('x', 40, h - bar - 6); ctx.fillText('y', 12, h - bar - 35);
   }
 
-  /* ---------- Coupe ---------- */
+  /* ---------- Cut ---------- */
   function drawCut() {
     const { ctx, w, h } = fit($('#cv-cut'));
     const m = { l: 40, r: 14, t: 14, b: 28 }, pw = w - m.l - m.r, ph = h - m.t - m.b, db = R.cut.db;
@@ -482,10 +482,10 @@
     ctx.textAlign = 'center'; ctx.textBaseline = 'top';
     for (let t = -90; t <= 90; t += 30) { ctx.beginPath(); ctx.moveTo(X(t), m.t); ctx.lineTo(X(t), m.t + ph); ctx.stroke(); ctx.fillText(t + '°', X(t), m.t + ph + 6); }
     ctx.fillText('θ', w - m.r - 4, m.t + ph + 6 - 22);
-    // Repère −3 dB
+    // −3 dB marker
     ctx.strokeStyle = 'rgba(251,191,36,.5)'; ctx.setLineDash([5, 4]);
     ctx.beginPath(); ctx.moveTo(m.l, Y(-3)); ctx.lineTo(w - m.r, Y(-3)); ctx.stroke(); ctx.setLineDash([]);
-    // Faisceaux contenus dans ce plan
+    // Beams lying in this plane
     S.beams.forEach((b, i) => {
       const d = ((b.phi - R.cut.phi) % 360 + 360) % 360;
       const t = d < 1 || d > 359 ? b.theta : Math.abs(d - 180) < 1 ? -b.theta : b.theta < 0.5 ? 0 : null;
@@ -524,7 +524,7 @@
     ctx.stroke();
   }
 
-  /* ---------- Champ proche (animé) ---------- */
+  /* ---------- Near field (animated) ---------- */
   function drawNear() {
     const nf = R.near; if (!nf) return;
     const { ctx, w, h } = fit($('#cv-near'));
@@ -532,7 +532,7 @@
     if (S.nfMode === 'dB') {
       for (let i = 0, k = 0; i < N; i++, k += 4) { const c = nf.dbIdx[i] * 3; d[k] = LUT_DB[c]; d[k + 1] = LUT_DB[c + 1]; d[k + 2] = LUT_DB[c + 2]; d[k + 3] = 255; }
     } else {
-      // Re{F·e^{jωt}} : l'onde s'éloigne du réseau quand la phase temporelle avance
+      // Re{F·e^{jωt}}: the wave travels away from the array as the time phase advances
       const lut = S.nfMode === 'E' ? LUT_E : LUT_H, c0 = Math.cos(wavePhase), s0 = Math.sin(wavePhase);
       for (let i = 0, k = 0; i < N; i++, k += 4) {
         const v = (nf.re[i] * c0 - nf.im[i] * s0) * nf.scale[i];
@@ -547,14 +547,14 @@
     const X = (s) => m.l + ((s + nf.half) / (2 * nf.half)) * aw, Y = (z) => m.t + (1 - z / nf.zmax) * ah;
     const cp = Math.cos(nf.phi0), sp = Math.sin(nf.phi0);
     ctx.save(); ctx.beginPath(); ctx.rect(m.l, m.t, aw, ah); ctx.clip();
-    // Limite de zone lointaine (Fraunhofer) si elle est dans la fenêtre
+    // Far-field (Fraunhofer) boundary when it falls inside the window
     const rf = R.farField / R.lam;
     if (rf < Math.hypot(nf.half, nf.zmax)) {
       ctx.strokeStyle = 'rgba(230,235,245,.4)'; ctx.setLineDash([6, 5]);
       ctx.beginPath(); ctx.ellipse(X(0), Y(0), (rf / (2 * nf.half)) * aw, (rf / nf.zmax) * ah, 0, Math.PI, 2 * Math.PI); ctx.stroke(); ctx.setLineDash([]);
       ctx.fillStyle = 'rgba(230,235,245,.6)'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ctx.fillText('2D²/λ', X(0), Y(rf) - 3);
     }
-    // Rayons des faisceaux situés dans ce plan
+    // Rays of the beams lying in this plane
     S.beams.forEach((b, i) => {
       const [u, v] = beamUV(b), inPlane = u * cp + v * sp, out = -u * sp + v * cp, wz = Math.cos(b.theta * DEG);
       if (Math.abs(out) > 0.03) return;
@@ -564,11 +564,11 @@
       ctx.setLineDash([]); ctx.globalAlpha = 1;
     });
     ctx.restore();
-    // Réseau (trace de l'ouverture dans le plan de coupe)
+    // Array (trace of the aperture in the cut plane)
     const ext = (Math.abs(cp) * (S.nx - 1) * S.dx + Math.abs(sp) * (S.ny - 1) * S.dy) / 2 + 0.25;
     ctx.strokeStyle = C.accent; ctx.lineWidth = 3; ctx.lineCap = 'round';
     ctx.beginPath(); ctx.moveTo(X(-ext), m.t + ah); ctx.lineTo(X(ext), m.t + ah); ctx.stroke(); ctx.lineCap = 'butt';
-    // Axes gradués en longueurs d'onde
+    // Axes graduated in wavelengths
     ctx.fillStyle = C.text; ctx.strokeStyle = C.grid; ctx.lineWidth = 1;
     const step = nf.half <= 6 ? 2 : nf.half <= 15 ? 5 : 10;
     ctx.textAlign = 'center'; ctx.textBaseline = 'top';
@@ -577,11 +577,11 @@
     for (let z = step; z < nf.zmax; z += step) ctx.fillText(z + 'λ', m.l - 5, Y(z));
     ctx.textBaseline = 'top'; ctx.fillText('z', m.l - 5, m.t);
 
-    // Sonde
+    // Probe
     if (probe && probe.x >= m.l && probe.x <= m.l + aw && probe.y >= m.t && probe.y <= m.t + ah) {
       const c = Math.min(nf.cols - 1, Math.floor(((probe.x - m.l) / aw) * nf.cols)), r = Math.min(nf.rows - 1, Math.floor(((probe.y - m.t) / ah) * nf.rows));
       const s = nf.half * ((2 * (probe.x - m.l)) / aw - 1), z = nf.zmax * (1 - (probe.y - m.t) / ah);
-      // Étalonnage sur le champ lointain : E_eff = √(30·Pin·G) / r dans la direction du maximum
+      // Calibrated on the far field: E_rms = √(30·Pin·G) / r towards the maximum
       const E = (Math.sqrt(30 * R.pin * R.G) / (Math.sqrt(R.pmax) * R.lam)) * nf.mag[r * nf.cols + c];
       const Hf = E / P.ETA0, Sd = (E * E) / P.ETA0, dist = Math.hypot(s, z) * R.lam;
       const eng = (x, u) => (x >= 1 ? x.toPrecision(3) + ' ' + u : x >= 1e-3 ? (x * 1e3).toPrecision(3) + ' m' + u : (x * 1e6).toPrecision(3) + ' µ' + u);
@@ -597,10 +597,10 @@
   }
 
   /* ------------------------------------------------------------------ */
-  /* Interactions sur les vues                                           */
+  /* View interactions                                                   */
   /* ------------------------------------------------------------------ */
   function bindCanvases() {
-    // u-v : sélectionne le faisceau cliqué, sinon déplace le faisceau actif
+    // u-v: selects the clicked beam, otherwise moves the active beam
     const uv = $('#cv-uv');
     const aim = (e, pick) => {
       const r = uv.getBoundingClientRect(), g = R.uvGeom; if (!g) return;
@@ -618,7 +618,7 @@
     uv.addEventListener('pointerdown', (e) => { uv.setPointerCapture(e.pointerId); aim(e, true); });
     uv.addEventListener('pointermove', (e) => { if (e.buttons & 1) aim(e, false); });
 
-    // 3D : rotation
+    // 3D: rotation
     const c3 = $('#cv-3d');
     let last = null;
     c3.addEventListener('pointerdown', (e) => { c3.setPointerCapture(e.pointerId); last = [e.clientX, e.clientY]; });
@@ -630,7 +630,7 @@
     });
     c3.addEventListener('pointerup', () => { last = null; });
 
-    // Champ proche : sonde
+    // Near field: probe
     const cn = $('#cv-near');
     cn.addEventListener('pointermove', (e) => { const r = cn.getBoundingClientRect(); probe = { x: e.clientX - r.left, y: e.clientY - r.top }; nearDirty = true; });
     cn.addEventListener('pointerleave', () => { probe = null; nearDirty = true; });
@@ -639,7 +639,7 @@
   }
 
   /* ------------------------------------------------------------------ */
-  /* Boucle principale                                                   */
+  /* Main loop                                                           */
   /* ------------------------------------------------------------------ */
   let lastT = 0;
   function frame(t) {
@@ -652,7 +652,7 @@
     requestAnimationFrame(frame);
   }
 
-  // Au démarrage, l'alimentation est placée au point d'adaptation à Z0.
+  // At start-up the feed is placed at the Z0 match point.
   {
     const d = P.designPatch(S.f * 1e9, S.er, S.h * 1e-3);
     S.inset = Math.round(P.analyzePatch({ f: S.f * 1e9, er: S.er, h: S.h * 1e-3, W: d.W, L: d.L, inset: 0, z0: S.z0 }).insetMatch * 1000) / 10;
@@ -663,6 +663,6 @@
   syncMisc();
   requestAnimationFrame(frame);
 
-  // Accès console pour les curieux : GridBeam.state, GridBeam.results
+  // Console access for the curious: GridBeam.state, GridBeam.results
   window.GridBeam = { state: S, results: R };
 })();
